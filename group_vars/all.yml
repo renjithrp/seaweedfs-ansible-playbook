@@ -1,0 +1,75 @@
+seaweedfs_version: "4.20"
+seaweedfs_download_base_url: "http://10.5.35.180"
+apt_proxy_url: "http://10.5.35.180:8080"
+apt_https_proxy: "false"
+seaweedfs_install_dir: /opt/seaweedfs
+seaweedfs_bin: /usr/local/bin/weed
+seaweedfs_user: seaweedfs
+seaweedfs_group: seaweedfs
+
+seaweedfs_master_data_dir: /data1/master
+seaweedfs_volume_data_dir: /data1/volume
+seaweedfs_volume_idx_dir: /data1/volume_idx
+seaweedfs_filer_data_dir: /data1/filer
+seaweedfs_log_dir: /var/log/seaweedfs
+
+seaweedfs_master_port: 9333
+seaweedfs_master_grpc_port: 19333
+seaweedfs_volume_port: 8080
+seaweedfs_volume_grpc_port: 18080
+seaweedfs_filer_port: 8888
+seaweedfs_filer_grpc_port: 18888
+seaweedfs_s3_port: 8333
+seaweedfs_s3_grpc_port: 18333
+seaweedfs_s3_bind_ip: 0.0.0.0
+seaweedfs_s3_access_key: "seaweedfs"
+seaweedfs_s3_secret_key: "seaweedfs-secret"
+
+seaweedfs_default_replication: "020"
+seaweedfs_volume_max: 0
+seaweedfs_volume_public_url: ""
+seaweedfs_collection: ""
+
+seaweedfs_db_backend: mysql
+seaweedfs_db_host: 10.5.93.209
+seaweedfs_db_port: 3306
+seaweedfs_db_name: seaweedfs
+seaweedfs_db_user: seaweed
+seaweedfs_db_password: "seaweedfs@123"
+seaweedfs_mysql_connection_max_idle: 10
+seaweedfs_mysql_connection_max_open: 100
+seaweedfs_mysql_connection_max_lifetime_seconds: 600
+
+seaweedfs_filer_group: primary
+
+haproxy_filer_bind_ip: 10.5.93.212
+haproxy_filer_port: 8888
+haproxy_s3_bind_ip: 10.5.93.212
+haproxy_s3_port: 8333
+
+seaweedfs_s3_config_enabled: true
+seaweedfs_s3_config:
+  identities:
+    - name: admin
+      credentials:
+        - accessKey: "{{ seaweedfs_s3_access_key }}"
+          secretKey: "{{ seaweedfs_s3_secret_key }}"
+      actions:
+        - Admin
+        - Read
+        - List
+        - Tagging
+        - Write
+seaweedfs_run_smoke_test: false
+seaweedfs_smoke_test_host: "{{ groups.get('masters', ['localhost']) | first }}"
+seaweedfs_smoke_test_file: /tmp/seaweedfs-smoke.txt
+seaweedfs_smoke_test_content: "hello seaweedfs smoke test"
+seaweedfs_filer_vip: "{{ hostvars.get(groups.get('haproxy', ['localhost']) | first, {}).get('ansible_host', '127.0.0.1') }}"
+seaweedfs_filer_test_url: "http://{{ seaweedfs_filer_vip }}:{{ seaweedfs_filer_port }}/smoke/seaweedfs-smoke.txt"
+seaweedfs_master_status_url: "http://{{ hostvars.get(groups.get('masters', ['localhost']) | first, {}).get('ansible_host', '127.0.0.1') }}:{{ seaweedfs_master_port }}/cluster/status"
+seaweedfs_dir_status_url: "http://{{ hostvars.get(groups.get('masters', ['localhost']) | first, {}).get('ansible_host', '127.0.0.1') }}:{{ seaweedfs_master_port }}/dir/status"
+seaweedfs_run_ha_replication_test: false
+seaweedfs_test_replication: "020"
+seaweedfs_ha_test_path: "/smoke/ha-replication-test.txt"
+seaweedfs_ha_test_content: "hello seaweedfs ha replication test"
+seaweedfs_expected_replica_count: 3

@@ -1,0 +1,25 @@
+[Unit]
+Description=SeaweedFS Master
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ seaweedfs_user }}
+Group={{ seaweedfs_group }}
+ExecStart={{ seaweedfs_bin }} master \
+  -ip={{ ansible_host | default(inventory_hostname) }} \
+  -port={{ seaweedfs_master_port }} \
+  -port.grpc={{ seaweedfs_master_grpc_port }} \
+  -mdir={{ seaweedfs_master_data_dir }} \
+  -defaultReplication={{ seaweedfs_default_replication }} \
+  -peers={% for h in groups.get('masters', []) %}{{ hostvars[h]['ansible_host'] }}:{{ seaweedfs_master_port }}{% if not loop.last %},{% endif %}{% endfor %}
+
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+StandardOutput=append:{{ seaweedfs_log_dir }}/master.log
+StandardError=append:{{ seaweedfs_log_dir }}/master.err.log
+
+[Install]
+WantedBy=multi-user.target

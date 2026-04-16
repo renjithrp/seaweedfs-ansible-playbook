@@ -1,0 +1,13 @@
+[leveldb2]
+enabled = false
+
+[mysql]
+enabled = true
+hostname = "{{ seaweedfs_db_host }}"
+port = {{ seaweedfs_db_port }}
+username = "{{ seaweedfs_db_user }}"
+password = "{{ seaweedfs_db_password }}"
+database = "{{ seaweedfs_db_name }}"
+connection_max_idle = {{ seaweedfs_mysql_connection_max_idle }}
+connection_max_open = {{ seaweedfs_mysql_connection_max_open }}
+connection_max_lifetime_seconds = {{ seaweedfs_mysql_connection_max_lifetime_seconds }}

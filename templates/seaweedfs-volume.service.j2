@@ -1,0 +1,28 @@
+[Unit]
+Description=SeaweedFS Volume
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ seaweedfs_user }}
+Group={{ seaweedfs_group }}
+ExecStart={{ seaweedfs_bin }} volume \
+  -ip={{ ansible_host | default(inventory_hostname) }} \
+  -port={{ seaweedfs_volume_port }} \
+  -port.grpc={{ seaweedfs_volume_grpc_port }} \
+  -dir={{ seaweedfs_volume_data_dir }} \
+  -dir.idx={{ seaweedfs_volume_idx_dir }} \
+  -max={{ seaweedfs_volume_max }} \
+  -master={% for h in groups.get('masters', []) %}{{ hostvars[h]['ansible_host'] }}:{{ seaweedfs_master_port }}{% if not loop.last %},{% endif %}{% endfor %} \
+  -dataCenter={{ seaweedfs_data_center }} \
+  -rack={{ seaweedfs_rack }}
+  
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+StandardOutput=append:{{ seaweedfs_log_dir }}/volume.log
+StandardError=append:{{ seaweedfs_log_dir }}/volume.err.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+    maxconn 4096
+    user haproxy
+    group haproxy
+
+defaults
+    mode http
+    log global
+    option httplog
+    option dontlognull
+    timeout connect 10s
+    timeout client 120s
+    timeout server 120s
+    retries 3
+
+frontend seaweedfs_filer_frontend
+    bind {{ haproxy_filer_bind_ip }}:{{ haproxy_filer_port }}
+    default_backend seaweedfs_filer_backend
+
+backend seaweedfs_filer_backend
+    balance roundrobin
+    option tcp-check
+{% for host in filer_backends %}
+    server filer{{ loop.index }} {{ host }}:{{ seaweedfs_filer_port }} check
+{% endfor %}
+
+{% if s3_backends | length > 0 %}
+frontend seaweedfs_s3_frontend
+    bind {{ haproxy_s3_bind_ip }}:{{ haproxy_s3_port }}
+    default_backend seaweedfs_s3_backend
+
+backend seaweedfs_s3_backend
+    balance roundrobin
+    option tcp-check
+{% for host in s3_backends %}
+    server s3{{ loop.index }} {{ host }}:{{ seaweedfs_s3_port }} check
+{% endfor %}
+{% endif %}

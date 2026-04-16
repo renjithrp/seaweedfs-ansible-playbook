@@ -1,0 +1,591 @@
+---
+- name: Validate inventory and shared settings
+  hosts: localhost
+  gather_facts: false
+  vars:
+    master_hosts: "{{ groups.get('masters', []) }}"
+    volume_hosts: "{{ groups.get('volumes', []) }}"
+    filer_hosts: "{{ groups.get('filers', []) }}"
+    s3_hosts: "{{ groups.get('s3', []) }}"
+    haproxy_hosts: "{{ groups.get('haproxy', []) }}"
+  tasks:
+    - name: Ensure there is at least one master
+      assert:
+        that:
+          - master_hosts | length >= 1
+        fail_msg: "At least one host must exist in the [masters] group."
+
+    - name: Ensure there is at least one volume server
+      assert:
+        that:
+          - volume_hosts | length >= 1
+        fail_msg: "At least one host must exist in the [volumes] group."
+
+    - name: Ensure S3 hosts are not configured without filer hosts
+      assert:
+        that:
+          - (s3_hosts | length == 0) or (filer_hosts | length >= 1)
+        fail_msg: "At least one filer is required when S3 is enabled."
+
+    - name: Warn if master count is even
+      debug:
+        msg: "You configured {{ master_hosts | length }} masters. SeaweedFS master quorum is usually best with an odd count such as 3 or 5."
+      when: master_hosts | length > 1 and (master_hosts | length % 2 == 0)
+
+- name: Install and configure SeaweedFS roles on storage nodes
+  hosts: seaweedfs_nodes
+  become: true
+  gather_facts: false
+  vars:
+    seaweedfs_arch: "linux_amd64"
+    seaweedfs_download_url: "{{ seaweedfs_download_base_url }}/{{ seaweedfs_version }}/{{ seaweedfs_arch }}.tar.gz"
+    seaweedfs_master_peers: >-
+      {% set peers = [] %}
+      {% for h in groups.get('masters', []) %}
+      {% set _ = peers.append(hostvars[h]['ansible_host'] ~ ':' ~ (seaweedfs_master_port | string)) %}
+      {% endfor %}
+      {{ peers }}
+
+    seaweedfs_filer_peers: >-
+      {% set peers = [] %}
+      {% for h in groups.get('filers', []) %}
+      {% set _ = peers.append(hostvars[h]['ansible_host'] ~ ':' ~ (seaweedfs_filer_port | string)) %}
+      {% endfor %}
+      {{ peers | join(',') }}
+  pre_tasks:
+    - name: Detect package manager on storage nodes
+      raw: |
+        if command -v apt-get >/dev/null 2>&1; then
+          echo apt
+        elif command -v dnf >/dev/null 2>&1; then
+          echo yum
+        elif command -v yum >/dev/null 2>&1; then
+          echo yum
+        else
+          echo unsupported
+          exit 1
+        fi
+      register: seaweedfs_pkg_mgr
+      changed_when: false
+
+    - name: Configure APT proxy on storage nodes
+      raw: |
+        rm -f /etc/apt/apt.conf.d/90ansible-proxy && \
+        printf '%s\n' \
+          'Acquire::http::Proxy "{{ apt_proxy_url }}";' \
+          'Acquire::https::Proxy "{{ apt_https_proxy }}";' \
+          > /etc/apt/apt.conf.d/01proxy
+      when: seaweedfs_pkg_mgr.stdout.strip() == 'apt'
+      changed_when: false
+
+    - name: Disable cdrom APT sources on storage nodes
+      raw: |
+        for file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+          [ -f "$file" ] || continue
+          sed -i '\|^[[:space:]]*deb[[:space:]].*file:/\{2,3\}/cdrom| s/^/# disabled by ansible: /' "$file"
+        done
+      when: seaweedfs_pkg_mgr.stdout.strip() == 'apt'
+      changed_when: false
+
+    - name: Install packages on Debian-family systems
+      apt:
+        name:
+          - curl
+          - tar
+          - gzip
+          - unzip
+          - jq
+        state: present
+        update_cache: true
+      when: seaweedfs_pkg_mgr.stdout.strip() == 'apt'
+
+    - name: Install packages on RedHat-family systems
+      yum:
+        name:
+          - curl
+          - tar
+          - gzip
+          - unzip
+          - jq
+        state: present
+      when: seaweedfs_pkg_mgr.stdout.strip() == 'yum'
+
+    - name: Create service group
+      raw: |
+        getent group {{ seaweedfs_group }} >/dev/null 2>&1 || groupadd -r {{ seaweedfs_group }}
+      changed_when: false
+
+    - name: Create service user
+      raw: |
+        if ! id -u {{ seaweedfs_user }} >/dev/null 2>&1; then
+          nologin_shell="$(command -v nologin || echo /usr/sbin/nologin)"
+          useradd -r -g {{ seaweedfs_group }} -s "$nologin_shell" -M {{ seaweedfs_user }}
+        fi
+      changed_when: false
+
+    - name: Create required directories
+      raw: >
+        install -d -o {{ item.owner | default(seaweedfs_user) }}
+        -g {{ item.group | default(seaweedfs_group) }}
+        -m {{ item.mode | default('0755') }}
+        {{ item.path }}
+      loop:
+        - { path: "{{ seaweedfs_install_dir }}", owner: root, group: root }
+        - { path: "{{ seaweedfs_master_data_dir }}" }
+        - { path: "{{ seaweedfs_volume_data_dir }}" }
+        - { path: "{{ seaweedfs_volume_idx_dir }}" }
+        - { path: "{{ seaweedfs_filer_data_dir }}" }
+        - { path: "{{ seaweedfs_log_dir }}" }
+        - { path: "/etc/seaweedfs", owner: root, group: "{{ seaweedfs_group }}", mode: '0750' }
+      changed_when: false
+
+    - name: Download SeaweedFS release tarball
+      get_url:
+        url: "{{ seaweedfs_download_url }}"
+        dest: "/tmp/seaweedfs-{{ seaweedfs_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract SeaweedFS release
+      unarchive:
+        src: "/tmp/seaweedfs-{{ seaweedfs_version }}.tar.gz"
+        dest: "{{ seaweedfs_install_dir }}"
+        remote_src: true
+        creates: "{{ seaweedfs_install_dir }}/weed"
+
+    - name: Install weed binary
+      copy:
+        src: "{{ seaweedfs_install_dir }}/weed"
+        dest: "{{ seaweedfs_bin }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0755'
+
+  tasks:
+    - name: Render filer.toml on filer hosts
+      template:
+        src: filer.toml.j2
+        dest: /etc/seaweedfs/filer.toml
+        owner: root
+        group: "{{ seaweedfs_group }}"
+        mode: '0640'
+      when: inventory_hostname in groups.get('filers', [])
+      notify: restart filer
+
+    - name: Render optional S3 config on S3 hosts
+      template:
+        src: s3.conf.j2
+        dest: /etc/seaweedfs/s3.conf
+        owner: root
+        group: "{{ seaweedfs_group }}"
+        mode: '0640'
+      when:
+        - inventory_hostname in groups.get('s3', [])
+        - seaweedfs_s3_config_enabled | bool
+      notify: restart s3
+
+    - name: Render master service
+      template:
+        src: seaweedfs-master.service.j2
+        dest: /etc/systemd/system/seaweedfs-master.service
+        mode: '0644'
+      when: inventory_hostname in groups.get('masters', [])
+      notify:
+        - daemon reload
+        - restart master
+
+    - name: Render volume service
+      template:
+        src: seaweedfs-volume.service.j2
+        dest: /etc/systemd/system/seaweedfs-volume.service
+        mode: '0644'
+      when: inventory_hostname in groups.get('volumes', [])
+      notify:
+        - daemon reload
+        - restart volume
+
+    - name: Render filer service
+      template:
+        src: seaweedfs-filer.service.j2
+        dest: /etc/systemd/system/seaweedfs-filer.service
+        mode: '0644'
+      when: inventory_hostname in groups.get('filers', [])
+      notify:
+        - daemon reload
+        - restart filer
+
+    - name: Render S3 service
+      template:
+        src: seaweedfs-s3.service.j2
+        dest: /etc/systemd/system/seaweedfs-s3.service
+        mode: '0644'
+      when: inventory_hostname in groups.get('s3', [])
+      notify:
+        - daemon reload
+        - restart s3
+
+    - name: Flush handlers before enabling services
+      meta: flush_handlers
+
+    - name: Enable and start master
+      systemd:
+        name: seaweedfs-master
+        enabled: true
+        state: started
+      when: inventory_hostname in groups.get('masters', [])
+
+    - name: Enable and start volume
+      systemd:
+        name: seaweedfs-volume
+        enabled: true
+        state: started
+      when: inventory_hostname in groups.get('volumes', [])
+
+    - name: Enable and start filer
+      systemd:
+        name: seaweedfs-filer
+        enabled: true
+        state: started
+      when: inventory_hostname in groups.get('filers', [])
+
+    - name: Enable and start S3
+      systemd:
+        name: seaweedfs-s3
+        enabled: true
+        state: started
+      when: inventory_hostname in groups.get('s3', [])
+
+  handlers:
+    - name: daemon reload
+      systemd:
+        daemon_reload: true
+
+    - name: restart master
+      systemd:
+        name: seaweedfs-master
+        state: restarted
+
+    - name: restart volume
+      systemd:
+        name: seaweedfs-volume
+        state: restarted
+
+    - name: restart filer
+      systemd:
+        name: seaweedfs-filer
+        state: restarted
+
+    - name: restart s3
+      systemd:
+        name: seaweedfs-s3
+        state: restarted
+
+- name: Install and configure HAProxy
+  hosts: haproxy
+  become: true
+  gather_facts: false
+  vars:
+    filer_backends: >-
+      {{ groups.get('filers', [])
+         | map('extract', hostvars, 'ansible_host')
+         | list }}
+    s3_backends: >-
+      {{ groups.get('s3', [])
+         | map('extract', hostvars, 'ansible_host')
+         | list }}
+  pre_tasks:
+    - name: Detect package manager on haproxy hosts
+      raw: |
+        if command -v apt-get >/dev/null 2>&1; then
+          echo apt
+        elif command -v dnf >/dev/null 2>&1; then
+          echo yum
+        elif command -v yum >/dev/null 2>&1; then
+          echo yum
+        else
+          echo unsupported
+          exit 1
+        fi
+      register: haproxy_pkg_mgr
+      changed_when: false
+
+    - name: Configure APT proxy on haproxy hosts
+      raw: |
+        rm -f /etc/apt/apt.conf.d/90ansible-proxy && \
+        printf '%s\n' \
+          'Acquire::http::Proxy "{{ apt_proxy_url }}";' \
+          'Acquire::https::Proxy "{{ apt_https_proxy }}";' \
+          > /etc/apt/apt.conf.d/01proxy
+      when: haproxy_pkg_mgr.stdout.strip() == 'apt'
+      changed_when: false
+
+    - name: Disable cdrom APT sources on haproxy hosts
+      raw: |
+        for file in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+          [ -f "$file" ] || continue
+          sed -i '\|^[[:space:]]*deb[[:space:]].*file:/\{2,3\}/cdrom| s/^/# disabled by ansible: /' "$file"
+        done
+      when: haproxy_pkg_mgr.stdout.strip() == 'apt'
+      changed_when: false
+
+    - name: Install haproxy package
+      apt:
+        name: haproxy
+        state: present
+        update_cache: true
+      when: haproxy_pkg_mgr.stdout.strip() == 'apt'
+
+    - name: Install haproxy package on RedHat-family systems
+      yum:
+        name: haproxy
+        state: present
+      when: haproxy_pkg_mgr.stdout.strip() == 'yum'
+
+  tasks:
+    - name: Render HAProxy config
+      template:
+        src: haproxy.cfg.j2
+        dest: /etc/haproxy/haproxy.cfg
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart haproxy
+
+    - name: Enable and start haproxy
+      systemd:
+        name: haproxy
+        enabled: true
+        state: started
+
+  handlers:
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted
+- name: Run SeaweedFS end-to-end smoke test
+  hosts: masters
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Skip unless smoke test is enabled
+      meta: end_play
+      when: not seaweedfs_run_smoke_test | bool
+
+    - name: Check master cluster status
+      run_once: true
+      uri:
+        url: "{{ seaweedfs_master_status_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: master_status
+
+    - name: Assert master cluster status looks healthy
+      run_once: true
+      assert:
+        that:
+          - master_status.json is defined
+          - master_status.json.Leader is defined
+
+    - name: Check volume topology
+      run_once: true
+      uri:
+        url: "{{ seaweedfs_dir_status_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: dir_status
+
+    - name: Assert all 4 racks are registered
+      run_once: true
+      assert:
+        that:
+          - dir_status.json.Topology is defined
+          - dir_status.json.Topology.DataCenters is defined
+          - dir_status.json.Topology.DataCenters | length > 0
+          - dir_status.json.Topology.DataCenters[0].Racks | length >= 4
+
+    - name: Create smoke test file
+      run_once: true
+      copy:
+        dest: "{{ seaweedfs_smoke_test_file }}"
+        content: "{{ seaweedfs_smoke_test_content }}"
+        mode: "0644"
+
+    - name: Upload smoke test file through filer VIP
+      run_once: true
+      shell: >
+        curl -sS -F "file=@{{ seaweedfs_smoke_test_file }}"
+        "{{ seaweedfs_filer_test_url }}"
+      args:
+        warn: false
+      register: upload_result
+      changed_when: false
+
+    - name: Verify upload response contains file name
+      run_once: true
+      assert:
+        that:
+          - "'seaweedfs-smoke.txt' in upload_result.stdout"
+
+    - name: Read back smoke test file through filer VIP
+      run_once: true
+      uri:
+        url: "{{ seaweedfs_filer_test_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: readback_result
+
+    - name: Assert readback content matches
+      run_once: true
+      assert:
+        that:
+          - readback_result.content == seaweedfs_smoke_test_content
+
+    - name: Show smoke test summary
+      run_once: true
+      debug:
+        msg:
+          - "Master leader: {{ master_status.json.Leader }}"
+          - "Smoke test upload/read succeeded via {{ seaweedfs_filer_test_url }}"
+- name: Run SeaweedFS HA and replication test
+  hosts: masters
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Skip unless HA/replication test is enabled
+      meta: end_play
+      when: not seaweedfs_run_ha_replication_test | bool
+      tags: ['ha_test']
+
+    - name: Create HA test file locally
+      run_once: true
+      copy:
+        dest: /tmp/seaweedfs-ha-test.txt
+        content: "{{ seaweedfs_ha_test_content }}"
+        mode: "0644"
+      tags: ['ha_test']
+
+    - name: Upload file with replication override
+      run_once: true
+      shell: >
+        curl -sS
+        -F "file=@/tmp/seaweedfs-ha-test.txt"
+        "{{ 'http://' ~ seaweedfs_filer_vip ~ ':' ~ seaweedfs_filer_port ~ seaweedfs_ha_test_path ~ '?replication=' ~ seaweedfs_test_replication }}"
+      args:
+        warn: false
+      register: ha_upload_result
+      changed_when: false
+      tags: ['ha_test']
+
+    - name: Parse upload response
+      run_once: true
+      set_fact:
+        ha_upload_json: "{{ ha_upload_result.stdout | from_json }}"
+      tags: ['ha_test']
+
+    - name: Assert upload succeeded
+      run_once: true
+      assert:
+        that:
+          - ha_upload_json.name is defined
+          - ha_upload_json.name == 'seaweedfs-ha-test.txt'
+      tags: ['ha_test']
+
+    - name: Read file before failure
+      run_once: true
+      uri:
+        url: "{{ 'http://' ~ seaweedfs_filer_vip ~ ':' ~ seaweedfs_filer_port ~ seaweedfs_ha_test_path }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: ha_read_before
+      tags: ['ha_test']
+
+    - name: Assert initial readback matches
+      run_once: true
+      assert:
+        that:
+          - ha_read_before.content == seaweedfs_ha_test_content
+      tags: ['ha_test']
+
+    - name: Stop first filer to simulate HA event
+      run_once: true
+      service:
+        name: seaweedfs-filer
+        state: stopped
+      delegate_to: "{{ groups['filers'][0] }}"
+      tags: ['ha_test']
+
+    - name: Wait a moment for HAProxy health check to react
+      run_once: true
+      pause:
+        seconds: 5
+      tags: ['ha_test']
+
+    - name: Read file through HAProxy after one filer is down
+      run_once: true
+      uri:
+        url: "{{ 'http://' ~ seaweedfs_filer_vip ~ ':' ~ seaweedfs_filer_port ~ seaweedfs_ha_test_path }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: ha_read_after
+      tags: ['ha_test']
+
+    - name: Assert HA readback still works
+      run_once: true
+      assert:
+        that:
+          - ha_read_after.content == seaweedfs_ha_test_content
+      tags: ['ha_test']
+
+    - name: Start filer again
+      run_once: true
+      service:
+        name: seaweedfs-filer
+        state: started
+      delegate_to: "{{ groups['filers'][0] }}"
+      tags: ['ha_test']
+
+    - name: Get current topology after replicated write
+      run_once: true
+      uri:
+        url: "{{ seaweedfs_dir_status_url }}"
+        method: GET
+        return_content: true
+        status_code: 200
+      register: ha_dir_status
+      tags: ['ha_test']
+
+    - name: Count volume servers that now host at least one volume
+      run_once: true
+      set_fact:
+        volume_nodes_with_volumes: >-
+          {{
+            ha_dir_status.json.Topology.DataCenters
+            | map(attribute='Racks') | list | flatten
+            | map(attribute='DataNodes') | list | flatten
+            | selectattr('Volumes', 'defined')
+            | selectattr('Volumes', 'gt', 0)
+            | list
+            | length
+          }}
+      tags: ['ha_test']
+
+    - name: Assert at least 3 volume nodes contain data
+      run_once: true
+      assert:
+        that:
+          - volume_nodes_with_volumes | int >= seaweedfs_expected_replica_count
+      tags: ['ha_test']
+
+    - name: Show HA/replication summary
+      run_once: true
+      debug:
+        msg:
+          - "HA read succeeded after stopping filer {{ groups['filers'][0] }}"
+          - "Replication setting used: {{ seaweedfs_test_replication }}"
+          - "Volume nodes with data: {{ volume_nodes_with_volumes }}"
+      tags: ['ha_test']
