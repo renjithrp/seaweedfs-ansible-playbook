@@ -165,16 +165,38 @@
         group: root
         mode: '0755'
 
-    - name: Download Grafana Alloy release archive
+    - name: Ensure local Grafana Alloy download directory exists
+      delegate_to: localhost
+      run_once: true
+      become: false
+      file:
+        path: "{{ grafana_alloy_archive_local_path | dirname }}"
+        state: directory
+        mode: '0755'
+      when: grafana_alloy_enabled | bool
+
+    - name: Download Grafana Alloy release archive on the Ansible host
+      delegate_to: localhost
+      run_once: true
+      become: false
       get_url:
         url: "{{ grafana_alloy_download_url }}"
-        dest: "/tmp/grafana-alloy-{{ grafana_alloy_version }}.zip"
+        dest: "{{ grafana_alloy_archive_local_path }}"
+        mode: '0644'
+      when: grafana_alloy_enabled | bool
+
+    - name: Copy Grafana Alloy release archive to storage nodes
+      copy:
+        src: "{{ grafana_alloy_archive_local_path }}"
+        dest: "{{ grafana_alloy_archive_remote_path }}"
+        owner: root
+        group: root
         mode: '0644'
       when: grafana_alloy_enabled | bool
 
     - name: Extract Grafana Alloy release archive
       unarchive:
-        src: "/tmp/grafana-alloy-{{ grafana_alloy_version }}.zip"
+        src: "{{ grafana_alloy_archive_remote_path }}"
         dest: "{{ grafana_alloy_install_dir }}"
         remote_src: true
       when: grafana_alloy_enabled | bool

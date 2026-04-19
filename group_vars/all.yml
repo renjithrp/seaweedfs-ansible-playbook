@@ -84,6 +84,8 @@ grafana_alloy_enabled: true
 grafana_alloy_version: "v1.15.1"
 grafana_alloy_arch: "linux-amd64"
 grafana_alloy_download_url: "https://github.com/grafana/alloy/releases/download/{{ grafana_alloy_version }}/alloy-{{ grafana_alloy_arch }}.zip"
+grafana_alloy_archive_local_path: "{{ playbook_dir }}/files/grafana-alloy-{{ grafana_alloy_version }}.zip"
+grafana_alloy_archive_remote_path: "/tmp/grafana-alloy-{{ grafana_alloy_version }}.zip"
 grafana_alloy_install_dir: /opt/grafana-alloy
 grafana_alloy_bin: /usr/local/bin/alloy
 grafana_alloy_config_dir: /etc/alloy
