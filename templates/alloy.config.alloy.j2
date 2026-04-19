@@ -1,0 +1,147 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+livedebugging {
+  enabled = false
+}
+
+loki.write "seaweedfs" {
+  endpoint {
+    url = "{{ grafana_alloy_loki_url }}"
+{% if grafana_alloy_loki_basic_auth_username | length > 0 and grafana_alloy_loki_basic_auth_password | length > 0 %}
+    basic_auth {
+      username = "{{ grafana_alloy_loki_basic_auth_username }}"
+      password = "{{ grafana_alloy_loki_basic_auth_password }}"
+    }
+{% endif %}
+{% if grafana_alloy_loki_tenant_id | length > 0 %}
+    tenant_id = "{{ grafana_alloy_loki_tenant_id }}"
+{% endif %}
+  }
+
+  external_labels = {
+    cluster = "{{ seaweedfs_observability_cluster }}",
+  }
+}
+
+{% if inventory_hostname in groups.get('masters', []) %}
+loki.source.file "master_logs" {
+  targets = [
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/master.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "master",
+      stream     = "stdout",
+    },
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/master.err.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "master",
+      stream     = "stderr",
+    },
+  ]
+  forward_to = [loki.write.seaweedfs.receiver]
+}
+{% endif %}
+
+{% if inventory_hostname in groups.get('volumes', []) %}
+loki.source.file "volume_logs" {
+  targets = [
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/volume.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "volume",
+      stream     = "stdout",
+    },
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/volume.err.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "volume",
+      stream     = "stderr",
+    },
+  ]
+  forward_to = [loki.write.seaweedfs.receiver]
+}
+{% endif %}
+
+{% if inventory_hostname in groups.get('filers', []) %}
+loki.source.file "filer_logs" {
+  targets = [
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/filer.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "filer",
+      stream     = "stdout",
+    },
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/filer.err.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "filer",
+      stream     = "stderr",
+    },
+  ]
+  forward_to = [loki.write.seaweedfs.receiver]
+}
+{% endif %}
+
+{% if inventory_hostname in groups.get('s3', []) %}
+loki.source.file "s3_logs" {
+  targets = [
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/s3.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "s3",
+      stream     = "stdout",
+    },
+    {
+      __path__   = "{{ seaweedfs_log_dir }}/s3.err.log",
+      cluster    = "{{ seaweedfs_observability_cluster }}",
+      datacenter = "{{ seaweedfs_data_center | default('') }}",
+      host       = "{{ inventory_hostname }}",
+      instance   = "{{ ansible_host | default(inventory_hostname) }}",
+      job        = "seaweedfs",
+      rack       = "{{ seaweedfs_rack | default('') }}",
+      role       = "s3",
+      stream     = "stderr",
+    },
+  ]
+  forward_to = [loki.write.seaweedfs.receiver]
+}
+{% endif %}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Grafana Alloy
+Documentation=https://grafana.com/docs/alloy/latest/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart={{ grafana_alloy_bin }} run {{ grafana_alloy_config_file }} \
+  --storage.path={{ grafana_alloy_data_dir }} \
+  --server.http.listen-addr=0.0.0.0:{{ grafana_alloy_http_port }}
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+WorkingDirectory={{ grafana_alloy_config_dir }}
+StandardOutput=append:{{ grafana_alloy_log_dir }}/alloy.log
+StandardError=append:{{ grafana_alloy_log_dir }}/alloy.err.log
+
+[Install]
+WantedBy=multi-user.target

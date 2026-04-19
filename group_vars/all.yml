@@ -15,12 +15,16 @@ seaweedfs_log_dir: /var/log/seaweedfs
 
 seaweedfs_master_port: 9333
 seaweedfs_master_grpc_port: 19333
+seaweedfs_master_metrics_port: 9325
 seaweedfs_volume_port: 8080
 seaweedfs_volume_grpc_port: 18080
+seaweedfs_volume_metrics_port: 9326
 seaweedfs_filer_port: 8888
 seaweedfs_filer_grpc_port: 18888
+seaweedfs_filer_metrics_port: 9327
 seaweedfs_s3_port: 8333
 seaweedfs_s3_grpc_port: 18333
+seaweedfs_s3_metrics_port: 9328
 seaweedfs_s3_bind_ip: 0.0.0.0
 seaweedfs_s3_access_key: "seaweedfs"
 seaweedfs_s3_secret_key: "seaweedfs-secret"
@@ -73,3 +77,24 @@ seaweedfs_test_replication: "020"
 seaweedfs_ha_test_path: "/smoke/ha-replication-test.txt"
 seaweedfs_ha_test_content: "hello seaweedfs ha replication test"
 seaweedfs_expected_replica_count: 3
+
+seaweedfs_observability_cluster: seaweedfs
+
+grafana_alloy_enabled: true
+grafana_alloy_version: "v1.15.1"
+grafana_alloy_arch: "linux-amd64"
+grafana_alloy_download_url: "https://github.com/grafana/alloy/releases/download/{{ grafana_alloy_version }}/alloy-{{ grafana_alloy_arch }}.zip"
+grafana_alloy_install_dir: /opt/grafana-alloy
+grafana_alloy_bin: /usr/local/bin/alloy
+grafana_alloy_config_dir: /etc/alloy
+grafana_alloy_config_file: "{{ grafana_alloy_config_dir }}/config.alloy"
+grafana_alloy_data_dir: /var/lib/alloy
+grafana_alloy_log_dir: /var/log/alloy
+grafana_alloy_http_port: 12345
+grafana_alloy_loki_url: "http://10.5.93.216:3100/loki/api/v1/push"
+grafana_alloy_loki_tenant_id: ""
+grafana_alloy_loki_basic_auth_username: ""
+grafana_alloy_loki_basic_auth_password: ""
+
+seaweedfs_prometheus_metrics_path: /metrics
+seaweedfs_prometheus_scrape_interval: 15s

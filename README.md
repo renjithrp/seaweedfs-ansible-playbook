@@ -6,6 +6,9 @@ This repository deploys a SeaweedFS cluster with Ansible, including:
 - volume servers
 - filer servers
 - S3 gateways
+- Grafana Alloy log shipping for SeaweedFS service logs
+- generated Prometheus scrape config for SeaweedFS metrics
+- importable Grafana dashboard for SeaweedFS observability
 - HAProxy for filer and S3 access
 - optional post-deploy smoke and HA/replication tests
 
@@ -35,9 +38,11 @@ The main playbook is [site.yml](/Users/renjith/Downloads/seaweedfs-ansible-full/
 
 1. Validates the inventory layout.
 2. Installs SeaweedFS binaries and configures master, volume, filer, and S3 services on `seaweedfs_nodes`.
-3. Installs and configures HAProxy on nodes in the `haproxy` group.
-4. Optionally runs an end-to-end smoke test from a master node.
-5. Optionally runs an HA and replication test from a master node.
+3. Installs Grafana Alloy on `seaweedfs_nodes` to ship SeaweedFS logs to Loki.
+4. Generates a Prometheus scrape config under `monitoring/prometheus/`.
+5. Installs and configures HAProxy on nodes in the `haproxy` group.
+6. Optionally runs an end-to-end smoke test from a master node.
+7. Optionally runs an HA and replication test from a master node.
 
 ## Prerequisites
 
@@ -78,12 +83,28 @@ Most settings live in [group_vars/all.yml](/Users/renjith/Downloads/seaweedfs-an
 
 - `seaweedfs_master_port`
 - `seaweedfs_master_grpc_port`
+- `seaweedfs_master_metrics_port`
 - `seaweedfs_volume_port`
 - `seaweedfs_volume_grpc_port`
+- `seaweedfs_volume_metrics_port`
 - `seaweedfs_filer_port`
 - `seaweedfs_filer_grpc_port`
+- `seaweedfs_filer_metrics_port`
 - `seaweedfs_s3_port`
 - `seaweedfs_s3_grpc_port`
+- `seaweedfs_s3_metrics_port`
+
+### Observability
+
+- `grafana_alloy_enabled`
+- `grafana_alloy_version`
+- `grafana_alloy_download_url`
+- `grafana_alloy_loki_url`
+- `grafana_alloy_loki_tenant_id`
+- `grafana_alloy_loki_basic_auth_username`
+- `grafana_alloy_loki_basic_auth_password`
+- `seaweedfs_observability_cluster`
+- `seaweedfs_prometheus_scrape_interval`
 
 ### Replication and filer backend
 
@@ -217,6 +238,40 @@ The HA test runs once from a master node and:
 - reads the file again through HAProxy to confirm failover
 - starts the filer again
 - checks topology to confirm the expected number of volume nodes contain data
+
+## Observability outputs
+
+The playbook now enables SeaweedFS Prometheus pull metrics by adding `-metricsPort` to each SeaweedFS systemd unit:
+
+- masters: `9325`
+- volume servers: `9326`
+- filers: `9327`
+- S3 gateways: `9328`
+
+SeaweedFS log shipping is handled by Grafana Alloy on each storage node. The default Loki push URL is:
+
+- `http://10.5.93.216:3100/loki/api/v1/push`
+
+If your Loki needs auth or tenant headers, set the related Alloy variables in [group_vars/all.yml](/Users/renjith/Documents/projects/seaweedfs-ansible-playbook/group_vars/all.yml:1).
+
+### Prometheus scrape config
+
+After running the playbook, import the generated scrape config from:
+
+- [monitoring/prometheus/seaweedfs-scrape-config.yml](/Users/renjith/Documents/projects/seaweedfs-ansible-playbook/monitoring/prometheus/seaweedfs-scrape-config.yml:1)
+
+Add that `scrape_configs` content into your Prometheus config on `http://127.0.0.1:9090/prometheus`, then reload Prometheus.
+
+### Grafana dashboard
+
+Import this dashboard JSON into Grafana:
+
+- [monitoring/dashboards/seaweedfs-observability-dashboard.json](/Users/renjith/Documents/projects/seaweedfs-ansible-playbook/monitoring/dashboards/seaweedfs-observability-dashboard.json:1)
+
+During import, map:
+
+- `DS_PROMETHEUS` to your Prometheus datasource
+- `DS_LOKI` to your Loki datasource
 
 ## Files in this repository
 

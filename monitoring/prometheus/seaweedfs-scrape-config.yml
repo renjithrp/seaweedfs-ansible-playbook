@@ -1,0 +1,109 @@
+# Generated from the current inventory in this repository.
+scrape_configs:
+  - job_name: seaweedfs-master
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - '10.5.93.212:9325'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n1'
+          rack: 'rack1'
+          role: master
+      - targets:
+          - '10.5.93.213:9325'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n2'
+          rack: 'rack2'
+          role: master
+      - targets:
+          - '10.5.93.214:9325'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n3'
+          rack: 'rack3'
+          role: master
+
+  - job_name: seaweedfs-volume
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - '10.5.93.212:9326'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n1'
+          rack: 'rack1'
+          role: volume
+      - targets:
+          - '10.5.93.213:9326'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n2'
+          rack: 'rack2'
+          role: volume
+      - targets:
+          - '10.5.93.214:9326'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n3'
+          rack: 'rack3'
+          role: volume
+      - targets:
+          - '10.5.93.215:9326'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n4'
+          rack: 'rack4'
+          role: volume
+
+  - job_name: seaweedfs-filer
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - '10.5.93.213:9327'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n2'
+          rack: 'rack2'
+          role: filer
+      - targets:
+          - '10.5.93.214:9327'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n3'
+          rack: 'rack3'
+          role: filer
+
+  - job_name: seaweedfs-s3
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - '10.5.93.213:9328'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n2'
+          rack: 'rack2'
+          role: s3
+      - targets:
+          - '10.5.93.214:9328'
+        labels:
+          cluster: 'seaweedfs'
+          datacenter: 'dc1'
+          host: 'swfs-n3'
+          rack: 'rack3'
+          role: s3

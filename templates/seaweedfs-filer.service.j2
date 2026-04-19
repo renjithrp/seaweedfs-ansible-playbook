@@ -11,6 +11,7 @@ ExecStart={{ seaweedfs_bin }} filer \
   -ip={{ ansible_host | default(inventory_hostname) }} \
   -port={{ seaweedfs_filer_port }} \
   -port.grpc={{ seaweedfs_filer_grpc_port }} \
+  -metricsPort={{ seaweedfs_filer_metrics_port }} \
   -defaultStoreDir={{ seaweedfs_filer_data_dir }} \
   -master={% for h in groups.get('masters', []) %}{{ hostvars[h]['ansible_host'] }}:{{ seaweedfs_master_port }}{% if not loop.last %},{% endif %}{% endfor %} \
   -filerGroup={{ seaweedfs_filer_group }}

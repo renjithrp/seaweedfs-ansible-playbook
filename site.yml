@@ -137,6 +137,10 @@
         - { path: "{{ seaweedfs_filer_data_dir }}" }
         - { path: "{{ seaweedfs_log_dir }}" }
         - { path: "/etc/seaweedfs", owner: root, group: "{{ seaweedfs_group }}", mode: '0750' }
+        - { path: "{{ grafana_alloy_install_dir }}", owner: root, group: root, mode: '0755' }
+        - { path: "{{ grafana_alloy_config_dir }}", owner: root, group: root, mode: '0755' }
+        - { path: "{{ grafana_alloy_data_dir }}", owner: root, group: root, mode: '0755' }
+        - { path: "{{ grafana_alloy_log_dir }}", owner: root, group: root, mode: '0755' }
       changed_when: false
 
     - name: Download SeaweedFS release tarball
@@ -160,6 +164,46 @@
         owner: root
         group: root
         mode: '0755'
+
+    - name: Download Grafana Alloy release archive
+      get_url:
+        url: "{{ grafana_alloy_download_url }}"
+        dest: "/tmp/grafana-alloy-{{ grafana_alloy_version }}.zip"
+        mode: '0644'
+      when: grafana_alloy_enabled | bool
+
+    - name: Extract Grafana Alloy release archive
+      unarchive:
+        src: "/tmp/grafana-alloy-{{ grafana_alloy_version }}.zip"
+        dest: "{{ grafana_alloy_install_dir }}"
+        remote_src: true
+      when: grafana_alloy_enabled | bool
+
+    - name: Find Grafana Alloy binary in extracted archive
+      find:
+        paths: "{{ grafana_alloy_install_dir }}"
+        patterns: alloy
+        recurse: true
+        file_type: file
+      register: grafana_alloy_binary_search
+      when: grafana_alloy_enabled | bool
+
+    - name: Assert Grafana Alloy binary was found
+      assert:
+        that:
+          - grafana_alloy_binary_search.files | length >= 1
+        fail_msg: "Unable to locate the Alloy binary after extracting {{ grafana_alloy_download_url }}."
+      when: grafana_alloy_enabled | bool
+
+    - name: Install Grafana Alloy binary
+      copy:
+        src: "{{ (grafana_alloy_binary_search.files | sort(attribute='path') | first).path }}"
+        dest: "{{ grafana_alloy_bin }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0755'
+      when: grafana_alloy_enabled | bool
 
   tasks:
     - name: Render filer.toml on filer hosts
@@ -224,6 +268,28 @@
         - daemon reload
         - restart s3
 
+    - name: Render Grafana Alloy config
+      template:
+        src: alloy.config.alloy.j2
+        dest: "{{ grafana_alloy_config_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: grafana_alloy_enabled | bool
+      notify: restart alloy
+
+    - name: Render Grafana Alloy service
+      template:
+        src: grafana-alloy.service.j2
+        dest: /etc/systemd/system/grafana-alloy.service
+        owner: root
+        group: root
+        mode: '0644'
+      when: grafana_alloy_enabled | bool
+      notify:
+        - daemon reload
+        - restart alloy
+
     - name: Flush handlers before enabling services
       meta: flush_handlers
 
@@ -255,6 +321,13 @@
         state: started
       when: inventory_hostname in groups.get('s3', [])
 
+    - name: Enable and start Grafana Alloy
+      systemd:
+        name: grafana-alloy
+        enabled: true
+        state: started
+      when: grafana_alloy_enabled | bool
+
   handlers:
     - name: daemon reload
       systemd:
@@ -279,6 +352,31 @@
       systemd:
         name: seaweedfs-s3
         state: restarted
+
+    - name: restart alloy
+      systemd:
+        name: grafana-alloy
+        state: restarted
+
+- name: Generate local SeaweedFS monitoring artifacts
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure monitoring artifact directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ playbook_dir }}/monitoring"
+        - "{{ playbook_dir }}/monitoring/prometheus"
+        - "{{ playbook_dir }}/monitoring/dashboards"
+
+    - name: Render SeaweedFS Prometheus scrape config
+      template:
+        src: templates/seaweedfs-prometheus-scrape-config.yml.j2
+        dest: "{{ playbook_dir }}/monitoring/prometheus/seaweedfs-scrape-config.yml"
+        mode: '0644'
 
 - name: Install and configure HAProxy
   hosts: haproxy

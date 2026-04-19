@@ -11,6 +11,7 @@ ExecStart={{ seaweedfs_bin }} master \
   -ip={{ ansible_host | default(inventory_hostname) }} \
   -port={{ seaweedfs_master_port }} \
   -port.grpc={{ seaweedfs_master_grpc_port }} \
+  -metricsPort={{ seaweedfs_master_metrics_port }} \
   -mdir={{ seaweedfs_master_data_dir }} \
   -defaultReplication={{ seaweedfs_default_replication }} \
   -peers={% for h in groups.get('masters', []) %}{{ hostvars[h]['ansible_host'] }}:{{ seaweedfs_master_port }}{% if not loop.last %},{% endif %}{% endfor %}

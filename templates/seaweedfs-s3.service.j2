@@ -11,6 +11,7 @@ ExecStart={{ seaweedfs_bin }} s3 \
   -ip.bind={{ seaweedfs_s3_bind_ip }} \
   -port={{ seaweedfs_s3_port }} \
   -port.grpc={{ seaweedfs_s3_grpc_port }} \
+  -metricsPort={{ seaweedfs_s3_metrics_port }} \
   -filer={% for h in groups.get('filers', []) %}{{ hostvars[h]['ansible_host'] }}:{{ seaweedfs_filer_port }}{% if not loop.last %},{% endif %}{% endfor %} \
   -config=/etc/seaweedfs/s3.conf
 WorkingDirectory=/etc/seaweedfs
