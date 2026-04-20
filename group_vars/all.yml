@@ -93,7 +93,7 @@ grafana_alloy_config_file: "{{ grafana_alloy_config_dir }}/config.alloy"
 grafana_alloy_data_dir: /var/lib/alloy
 grafana_alloy_log_dir: /var/log/alloy
 grafana_alloy_http_port: 12345
-grafana_alloy_loki_url: "http://10.5.93.216:3100/loki/api/v1/push"
+grafana_alloy_loki_url: "http://10.5.93.216:3100/loki/loki/api/v1/push"
 grafana_alloy_loki_tenant_id: ""
 grafana_alloy_loki_basic_auth_username: ""
 grafana_alloy_loki_basic_auth_password: ""

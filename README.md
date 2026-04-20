@@ -250,7 +250,7 @@ The playbook now enables SeaweedFS Prometheus pull metrics by adding `-metricsPo
 
 SeaweedFS log shipping is handled by Grafana Alloy on each storage node. The default Loki push URL is:
 
-- `http://10.5.93.216:3100/loki/api/v1/push`
+- `http://10.5.93.216:3100/loki/loki/api/v1/push`
 
 If your Loki needs auth or tenant headers, set the related Alloy variables in [group_vars/all.yml](/Users/renjith/Documents/projects/seaweedfs-ansible-playbook/group_vars/all.yml:1).
 
