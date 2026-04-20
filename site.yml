@@ -204,22 +204,32 @@
     - name: Find Grafana Alloy binary in extracted archive
       find:
         paths: "{{ grafana_alloy_install_dir }}"
-        patterns: alloy
+        patterns: "alloy*"
         recurse: true
         file_type: file
       register: grafana_alloy_binary_search
       when: grafana_alloy_enabled | bool
 
+    - name: Select extracted Grafana Alloy binary candidate
+      set_fact:
+        grafana_alloy_binary_candidates: >-
+          {{
+            grafana_alloy_binary_search.files
+            | rejectattr('path', 'search', '\\.(txt|md|sha256)$')
+            | sort(attribute='size', reverse=true)
+          }}
+      when: grafana_alloy_enabled | bool
+
     - name: Assert Grafana Alloy binary was found
       assert:
         that:
-          - grafana_alloy_binary_search.files | length >= 1
-        fail_msg: "Unable to locate the Alloy binary after extracting {{ grafana_alloy_download_url }}."
+          - grafana_alloy_binary_candidates | length >= 1
+        fail_msg: "Unable to locate an Alloy binary after extracting {{ grafana_alloy_download_url }} into {{ grafana_alloy_install_dir }}."
       when: grafana_alloy_enabled | bool
 
     - name: Install Grafana Alloy binary
       copy:
-        src: "{{ (grafana_alloy_binary_search.files | sort(attribute='path') | first).path }}"
+        src: "{{ (grafana_alloy_binary_candidates | first).path }}"
         dest: "{{ grafana_alloy_bin }}"
         remote_src: true
         owner: root
